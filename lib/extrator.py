@@ -1,227 +1,62 @@
 import google.generativeai as genai
 import streamlit as st
-import json
-import re
 import pdfplumber
-import pandas as pd
-from io import BytesIO
+import io
+import json
 
-SYSTEM_PROMPT = """
-Você é um especialista em contabilidade brasileira com domínio dos regimes de
-Lucro Presumido e Lucro Real. Analise o documento financeiro e extraia os dados
-em JSON estruturado.
+# Força a leitura da chave de API
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+except KeyError:
+    st.error("Chave GEMINI_API_KEY não encontrada nos secrets.")
 
-REGRAS CRÍTICAS:
-
-1. Valores: float com 2 casas decimais (686553.84). Remova pontos de milhar,
-   converta vírgula decimal em ponto. Deduções e despesas são POSITIVOS no JSON.
-
-2. Regime Lucro Presumido (IR e CSLL aparecem ANTES da Receita Líquida):
-   extrair exatamente como está. NÃO mover IR/CSLL para abaixo do LAIR.
-
-3. Balancete tem saldos ACUMULADOS. DRE do mês é fonte primária para resultado.
-   Se só o balancete for enviado, usar colunas de débito/crédito do período.
-
-4. Se campo não existir: retornar null. Nunca inventar valores.
-
-5. Detectar unidade (reais/milhares/milhões) e converter tudo para REAIS.
-
-6. Retornar APENAS o JSON, sem markdown, sem explicação.
-
-SCHEMA:
-{
-  "tipo_documento": "DRE" | "BALANCETE" | "DRE+BALANCETE" | "BP",
-  "regime_tributario": "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "SIMPLES" | "DESCONHECIDO",
-  "competencia": "YYYY-MM",
-  "empresa_nome": string | null,
-  "cnpj": string | null,
-  "consolidado": boolean,
-  "unidade": "REAIS" | "MILHARES" | "MILHOES",
-  "dre": {
-    "receita_bruta_total": number | null,
-    "deducoes_receita": {
-      "iss": number | null,
-      "cofins": number | null,
-      "pis": number | null,
-      "contribuicao_social_csll": number | null,
-      "imposto_renda": number | null,
-      "outras_deducoes": number | null,
-      "total_deducoes": number | null
-    },
-    "receita_liquida": number | null,
-    "custo_servicos_prestados": number | null,
-    "custo_mercadorias_vendidas": number | null,
-    "custo_total": number | null,
-    "lucro_bruto": number | null,
-    "despesas_operacionais": {
-      "vendas": {
-        "publicidade_propaganda": number | null,
-        "comissoes": number | null,
-        "outras_vendas": number | null,
-        "total": number | null
-      },
-      "administrativas": {
-        "pessoal": {
-          "salarios": number | null,
-          "pro_labore": number | null,
-          "ferias": number | null,
-          "decimo_terceiro": number | null,
-          "inss": number | null,
-          "fgts": number | null,
-          "alimentacao": number | null,
-          "vale_transporte": number | null,
-          "outros_pessoal": number | null,
-          "total": number | null
-        },
-        "servicos_terceiros": number | null,
-        "cessao_uso_sistemas": number | null,
-        "depreciacao_amortizacao": number | null,
-        "viagens": number | null,
-        "alugueis_condominios": number | null,
-        "telefone_internet": number | null,
-        "assistencia_contabil": number | null,
-        "seguros": number | null,
-        "mensalidades_anuidades": number | null,
-        "confraternizacao_eventos": number | null,
-        "outros_administrativos": number | null,
-        "total": number | null
-      },
-      "total_despesas_operacionais": number | null
-    },
-    "resultado_operacional": number | null,
-    "resultado_financeiro": {
-      "receitas_financeiras": number | null,
-      "despesas_financeiras": number | null,
-      "liquido": number | null
-    },
-    "outras_receitas_despesas": number | null,
-    "lucro_liquido": number | null
-  },
-  "bp_ativo": {
-    "circulante": {
-      "caixa_bancos": number | null,
-      "aplicacoes_financeiras": number | null,
-      "contas_receber": number | null,
-      "estoques": number | null,
-      "tributos_recuperar": number | null,
-      "outros_circulante": number | null,
-      "total": number | null
-    },
-    "nao_circulante": {
-      "adiantamentos_socios": number | null,
-      "investimentos": number | null,
-      "imobilizado_liquido": number | null,
-      "intangivel_liquido": number | null,
-      "total": number | null
-    },
-    "total_ativo": number | null
-  },
-  "bp_passivo": {
-    "circulante": {
-      "fornecedores": number | null,
-      "obrigacoes_tributarias": number | null,
-      "obrigacoes_trabalhistas": number | null,
-      "provisoes": number | null,
-      "outras_obrigacoes_cp": number | null,
-      "total": number | null
-    },
-    "nao_circulante": {
-      "emprestimos_lp": number | null,
-      "financiamentos_lp": number | null,
-      "total": number | null
-    },
-    "patrimonio_liquido": {
-      "capital_social": number | null,
-      "prejuizos_acumulados": number | null,
-      "total": number | null
-    },
-    "total_passivo_pl": number | null
-  },
-  "observacoes": string | null,
-  "confianca_extracao": number
-}
-"""
-
-def extrair_texto_pdf(arquivo: BytesIO) -> str:
-    """Extrai todo o texto de um PDF usando pdfplumber."""
-    texto = []
-    with pdfplumber.open(arquivo) as pdf:
-        for pagina in pdf.pages:
-            t = pagina.extract_text()
-            if t:
-                texto.append(t)
-    return "\n".join(texto)
-
-def extrair_texto_xlsx(arquivo: BytesIO) -> str:
-    """Converte XLSX/CSV em texto tabular para enviar ao Claude."""
-    try:
-        df = pd.read_excel(arquivo, header=None)
-    except Exception:
-        arquivo.seek(0)
-        df = pd.read_csv(arquivo, header=None)
-    return df.to_string(index=False)
-
-def limpar_json(texto: str) -> str:
-    """Remove markdown e extrai apenas o bloco JSON da resposta."""
-    # Remover blocos de código markdown
-    texto = re.sub(r'```(?:json)?', '', texto).strip()
-    # Extrair primeiro objeto JSON válido
-    match = re.search(r'\{.*\}', texto, re.DOTALL)
-    if match:
-        return match.group(0)
-    return texto
-
-def extrair_dados(arquivo: BytesIO, nome_arquivo: str) -> dict:
-    """
-    Pipeline completo de extração:
-    1. Ler arquivo (PDF ou XLSX)
-    2. Enviar texto ao Claude
-    3. Parsear JSON da resposta
-    4. Validar campos críticos
-    5. Retornar dados estruturados
-    """
-    # 1. Extrair texto conforme tipo de arquivo
-    if nome_arquivo.lower().endswith('.pdf'):
-        texto = extrair_texto_pdf(arquivo)
-    elif nome_arquivo.lower().endswith(('.xlsx', '.xls')):
-        texto = extrair_texto_xlsx(arquivo)
-    elif nome_arquivo.lower().endswith('.csv'):
-        texto = extrair_texto_xlsx(arquivo)
-    else:
-        raise ValueError(f"Formato não suportado: {nome_arquivo}")
-
-    if not texto.strip():
-        raise ValueError("Não foi possível extrair texto do arquivo. Verifique se o PDF não é uma imagem escaneada sem OCR.")
-
-    # 2. Força a leitura da chave de API diretamente dos Secrets do Streamlit Cloud
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=api_key)
-    except KeyError:
-        st.error("Chave GEMINI_API_KEY não encontrada nos secrets.")
-
-    # 3. Instancia o modelo usando o prefixo obrigatório de recurso da API
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
-
-    prompt_completo = f"{SYSTEM_PROMPT}\n\nExtraía os dados financeiros do documento abaixo:\n\n{texto}"
+def extrair_dados(conteudo, nome_arquivo):
+    # 1. Instancia o modelo atualizado
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    resposta = model.generate_content(prompt_completo)
-    texto_resposta = resposta.text
-
-    # 3. Parsear JSON
+    # 2. Extrai o texto do PDF diretamente da memória RAM do Streamlit
+    texto_dre = ""
     try:
-        json_limpo = limpar_json(texto_resposta)
-        dados = json.loads(json_limpo)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Claude retornou resposta inválida. Tente novamente. Erro: {e}")
+        # Transforma os bytes recebidos pelo Streamlit em um arquivo legível
+        with pdfplumber.open(io.BytesIO(conteudo)) as pdf:
+            for pagina in pdf.pages:
+                texto_extraido = pagina.extract_text()
+                if texto_extraido:
+                    texto_dre += texto_extraido + "\n"
+    except Exception as e:
+        st.error(f"Erro na leitura do arquivo PDF local: {e}")
+        return None
 
-    # 4. Validar campos críticos
-    dre = dados.get('dre', {})
-    if dre.get('receita_liquida') is None and dre.get('receita_bruta_total') is None:
-        dados['confianca_extracao'] = min(dados.get('confianca_extracao', 0.5), 0.5)
+    # Se a extração falhar ou o PDF for apenas uma imagem escaneada
+    if not texto_dre.strip():
+        st.warning("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada.")
+        return None
 
-    # 5. Marcar para revisão se confiança baixa
-    if dados.get('confianca_extracao', 1.0) < 0.85:
-        dados['_requer_revisao'] = True
-
-    return dados
+    # 3. Constrói o prompt injetando apenas o TEXTO do documento, evitando erros 404 de File API
+    prompt_completo = f"""
+    Você é um analista financeiro sênior. Extraia as principais métricas financeiras (Receita, Custos, Lucro, etc.) do documento abaixo.
+    Retorne o resultado EXCLUSIVAMENTE em um formato JSON válido, sem formatações markdown e sem textos adicionais.
+    
+    Nome do Arquivo: {nome_arquivo}
+    
+    Conteúdo do Documento:
+    {texto_dre}
+    """
+    
+    # 4. Envia o texto puro para o modelo
+    try:
+        resposta = model.generate_content(prompt_completo)
+        
+        # Limpa possível formatação markdown que o Gemini possa retornar
+        texto_limpo = resposta.text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        
+        # Valida se é um JSON estruturado
+        return json.loads(texto_limpo)
+        
+    except json.JSONDecodeError:
+        st.error("A IA não retornou um formato JSON válido.")
+        return None
+    except Exception as e:
+        st.error(f"Erro ao comunicar com o Google Gemini: {e}")
+        return None
