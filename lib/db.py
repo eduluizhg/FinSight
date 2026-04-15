@@ -1,8 +1,5 @@
 import streamlit as st
 from supabase import create_client, Client
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
 
 # ---------- Supabase client (para operações simples) ----------
 
@@ -17,38 +14,20 @@ def get_supabase() -> Client:
         st.secrets["SUPABASE_KEY"]
     )
 
-# ---------- Conexão direta PostgreSQL (para queries complexas) ----------
-
-@st.cache_resource
-def get_db_url() -> str:
-    """URL do banco lida dos secrets do Streamlit."""
-    return st.secrets["SUPABASE_DB_URL"]
-
-@contextmanager
-def get_conn():
-    """
-    Context manager para conexões PostgreSQL diretas.
-    Fecha a conexão automaticamente ao sair do bloco with.
-    Usar para INSERTs, UPDATEs e queries com JOINs complexos.
-    """
-    conn = psycopg2.connect(get_db_url(), cursor_factory=RealDictCursor)
-    try:
-        yield conn
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-
 # ---------- Helpers de consulta ----------
 
-def buscar_empresa_principal() -> dict | None:
-    """Retorna a primeira empresa cadastrada (versão single-tenant)."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM empresas ORDER BY criado_em LIMIT 1")
-            return cur.fetchone()
+def buscar_empresa_principal():
+    supabase = get_supabase()
+    try:
+        # Equivalente a: SELECT * FROM empresas LIMIT 1;
+        resposta = supabase.table("empresas").select("*").limit(1).execute()
+        
+        if resposta.data and len(resposta.data) > 0:
+            return resposta.data[0]
+        return None
+    except Exception as e:
+        st.error(f"Erro de comunicação via API: {e}")
+        return None
 
 def buscar_demonstrativos_ano(empresa_id: str, ano: int) -> list[dict]:
     """Retorna todos os demonstrativos de um ano, ordenados por mês."""
