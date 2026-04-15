@@ -195,7 +195,7 @@ def extrair_dados(arquivo: BytesIO, nome_arquivo: str) -> dict:
 
     # 2. Chamar Gemini API
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
     prompt_completo = f"{SYSTEM_PROMPT}\n\nExtraía os dados financeiros do documento abaixo:\n\n{texto}"
     
