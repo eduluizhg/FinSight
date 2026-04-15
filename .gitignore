@@ -1,0 +1,16 @@
+.streamlit/secrets.toml
+.env
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+*.log
+.idea/
+.vscode/*
+!.vscode/settings.json
