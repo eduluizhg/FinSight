@@ -1,5 +1,5 @@
 import streamlit as st
-from lib.db import buscar_empresa_principal, get_conn
+from lib.db import buscar_empresa_principal
 from lib.utils import fmt_brl, MESES_PT
 import pandas as pd
 

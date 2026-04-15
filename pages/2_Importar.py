@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 from datetime import datetime
-from lib.db import buscar_empresa_principal, get_conn
+from lib.db import buscar_empresa_principal
 from lib.extrator import extrair_dados
 from lib.kpis import calcular_kpis
 from lib.alertas import avaliar_alertas
