@@ -37,7 +37,7 @@ create table if not exists uploads (
   confianca_ia    numeric(4,3),
   versao          int not null default 1,
   criado_em       timestamptz not null default now(),
-  index(empresa_id, competencia)
+  unique(empresa_id, competencia)
 );
 create index if not exists idx_uploads_empresa_competencia on uploads(empresa_id, competencia);
 

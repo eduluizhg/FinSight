@@ -193,9 +193,15 @@ def extrair_dados(arquivo: BytesIO, nome_arquivo: str) -> dict:
     if not texto.strip():
         raise ValueError("Não foi possível extrair texto do arquivo. Verifique se o PDF não é uma imagem escaneada sem OCR.")
 
-    # 2. Chamar Gemini API
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # 2. Força a leitura da chave de API diretamente dos Secrets do Streamlit Cloud
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+        genai.configure(api_key=api_key)
+    except KeyError:
+        st.error("Chave GEMINI_API_KEY não encontrada nos secrets.")
+
+    # 3. Instancia o modelo usando o prefixo obrigatório de recurso da API
+    model = genai.GenerativeModel('models/gemini-1.5-flash')
 
     prompt_completo = f"{SYSTEM_PROMPT}\n\nExtraía os dados financeiros do documento abaixo:\n\n{texto}"
     
