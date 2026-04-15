@@ -1,6 +1,6 @@
 # FinSight — Financial Intelligence Dashboard
 
-Streamlit + Supabase + Claude AI financial extraction and analytics dashboard.
+Streamlit + Supabase + Google Gemini AI financial extraction and analytics dashboard.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ Streamlit + Supabase + Claude AI financial extraction and analytics dashboard.
 
 - Python 3.11+
 - Supabase account (free tier)
-- Anthropic API key (Claude Sonnet 4.5)
+- Google Gemini API key
 - GitHub account
 
 ### Local Setup
@@ -20,9 +20,9 @@ Streamlit + Supabase + Claude AI financial extraction and analytics dashboard.
 
 2. **Create `.streamlit/secrets.toml`** (Never commit this):
    ```toml
-   ANTHROPIC_API_KEY = "sk-ant-..."
-   SUPABASE_DB_URL = "postgresql://postgres.REF:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"
-   SUPABASE_URL = "https://REF.supabase.co"
+   GEMINI_API_KEY = "AIzaSy..."
+   SUPABASE_DB_URL = "postgresql://postgres:YOUR_PASSWORD@db.XXXXX.supabase.co:5432/postgres"
+   SUPABASE_URL = "https://XXXXX.supabase.co"
    SUPABASE_KEY = "eyJ..."
    ```
 
@@ -89,14 +89,14 @@ finsight/
 
 - Streamlit Cloud: **Free** (with limitations)
 - Supabase: **Free tier** covers ~1K rows (12 months sample data)
-- Claude API: ~$0.10 per PDF extraction (~$1–3/month)
+- Gemini API: **Free tier** covers up to 15 requests/minute, or ~$0.075 per 1M input tokens
 
-**Total cost:** $0–5 USD for low-volume usage (< 20 uploads/month)
+**Total cost:** $0–2 USD for low-volume usage (< 20 uploads/month)
 
 ## Key Features
 
 - 📊 Dashboard with 12-month KPI tracking
-- 🤖 Automatic financial data extraction via Claude API
+- 🤖 Automatic financial data extraction via Gemini API
 - 📈 Margin trends, expense analysis, cash flow alerts
 - 🎯 Monthly targets vs actuals
 - 🔔 Automatic alert generation
